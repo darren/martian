@@ -18,7 +18,6 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
-	"encoding/base64"
 	"errors"
 	"io"
 	"net"
@@ -96,8 +95,8 @@ func (p *Proxy) SetRoundTripper(rt http.RoundTripper) {
 
 	if tr, ok := p.roundTripper.(*http.Transport); ok {
 		tr.TLSNextProto = make(map[string]func(string, *tls.Conn) http.RoundTripper)
-		//tr.Proxy = http.ProxyURL(p.proxyURL)
-		//tr.Dial = p.dial
+		tr.Proxy = http.ProxyURL(p.proxyURL)
+		tr.Dial = p.dial
 	}
 }
 
@@ -414,11 +413,9 @@ func (p *Proxy) handle(ctx *Context, conn net.Conn, brw *bufio.ReadWriter) error
 			return nil
 		}
 		res.ContentLength = -1
-		log.Infof("Write response: %v", res.Status)
 		if err := res.Write(brw); err != nil {
 			log.Errorf("martian: got error while writing response back to client: %v", err)
 		}
-		log.Infof("Flush response: %v", res.Status)
 		if err := brw.Flush(); err != nil {
 			log.Errorf("martian: got error while flushing response back to client: %v", err)
 		}
@@ -559,42 +556,7 @@ func (p *Proxy) roundTrip(ctx *Context, req *http.Request) (*http.Response, erro
 }
 
 func (p *Proxy) connect(req *http.Request) (*http.Response, net.Conn, error) {
-	if tr, ok := p.roundTripper.(*http.Transport); ok {
-		downstreamProxy, err := tr.Proxy(req)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		if downstreamProxy != nil {
-			log.Debugf("martian: CONNECT with downstream proxy: %s", downstreamProxy.Host)
-
-			conn, err := p.dial("tcp", downstreamProxy.Host)
-			if err != nil {
-				return nil, nil, err
-			}
-
-			if downstreamProxy.User != nil {
-				basicAuth := base64.StdEncoding.EncodeToString([]byte(downstreamProxy.User.String()))
-				req.Header.Set("Proxy-Authorization", "Basic "+basicAuth)
-			}
-
-			pbw := bufio.NewWriter(conn)
-			pbr := bufio.NewReader(conn)
-
-			req.Write(pbw)
-			pbw.Flush()
-
-			res, err := http.ReadResponse(pbr, req)
-
-			if err != nil {
-				return nil, nil, err
-			}
-			res.Body.Close()
-
-			res.Body = http.NoBody
-			return res, conn, nil
-		}
-	} else if p.proxyURL != nil {
+	if p.proxyURL != nil {
 		log.Debugf("martian: CONNECT with downstream proxy: %s", p.proxyURL.Host)
 
 		conn, err := p.dial("tcp", p.proxyURL.Host)
