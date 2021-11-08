@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/google/martian"
-	"github.com/google/martian/log"
+	"github.com/google/martian/v3"
+	"github.com/google/martian/v3/log"
 )
 
 // Forwarder is a request modifier that routes the request to the API server and
@@ -33,6 +33,9 @@ type Forwarder struct {
 
 // NewForwarder returns a Forwarder that rewrites requests to host.
 func NewForwarder(host string, port int) *Forwarder {
+	if host == "" {
+		host = "localhost"
+	}
 	return &Forwarder{
 		host: host,
 		port: port,
@@ -41,6 +44,7 @@ func NewForwarder(host string, port int) *Forwarder {
 
 // ModifyRequest forwards the request to the local API server running at f.port,
 // downgrades the scheme to http and marks the request context for skipped logging.
+// API requests are marked for skipping the roundtrip.
 func (f *Forwarder) ModifyRequest(req *http.Request) error {
 	ctx := martian.NewContext(req)
 	ctx.APIRequest()
@@ -48,7 +52,7 @@ func (f *Forwarder) ModifyRequest(req *http.Request) error {
 
 	in := req.URL.String()
 	req.URL.Scheme = "http"
-	req.URL.Host = fmt.Sprintf("%s:%d", "localhost", f.port)
+	req.URL.Host = fmt.Sprintf("%s:%d", f.host, f.port)
 	out := req.URL.String()
 	log.Infof("api.Forwarder: forwarding %s to %s", in, out)
 

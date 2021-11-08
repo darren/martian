@@ -18,7 +18,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/google/martian"
+	"github.com/google/martian/v3"
 )
 
 func TestApiForwarder(t *testing.T) {
@@ -52,5 +52,28 @@ func TestApiForwarder(t *testing.T) {
 
 	if !ctx.IsAPIRequest() {
 		t.Errorf("ctx.IsApiRequest: got false, want true")
+	}
+}
+
+func TestApiForwarderWithHost(t *testing.T) {
+	forwarder := NewForwarder("example.com", 8181)
+
+	req, err := http.NewRequest("GET", "https://martian.proxy/configure", nil)
+	if err != nil {
+		t.Fatalf("NewRequest(): got %v, want no error", err)
+	}
+
+	_, remove, err := martian.TestContext(req, nil, nil)
+	if err != nil {
+		t.Fatalf("TestContext(): got %v, want no error", err)
+	}
+	defer remove()
+
+	if err := forwarder.ModifyRequest(req); err != nil {
+		t.Fatalf("ModifyRequest(): got %v, want no error", err)
+	}
+
+	if got, want := req.URL.Host, "example.com:8181"; got != want {
+		t.Errorf("req.URL.Host: got %s, want %s", got, want)
 	}
 }

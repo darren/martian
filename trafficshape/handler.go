@@ -22,7 +22,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/google/martian/log"
+	"github.com/google/martian/v3/log"
 )
 
 // Handler configures a trafficshape.Listener.
@@ -227,5 +227,4 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	rw.WriteHeader(http.StatusOK)
 	io.WriteString(rw, bodystr)
-	log.Infof("trafficshape: Configured from json %s", bodystr)
 }

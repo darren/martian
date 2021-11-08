@@ -205,33 +205,33 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/martian"
-	mapi "github.com/google/martian/api"
-	"github.com/google/martian/cors"
-	"github.com/google/martian/fifo"
-	"github.com/google/martian/har"
-	"github.com/google/martian/httpspec"
-	"github.com/google/martian/marbl"
-	"github.com/google/martian/martianhttp"
-	"github.com/google/martian/martianlog"
-	"github.com/google/martian/mitm"
-	"github.com/google/martian/servemux"
-	"github.com/google/martian/trafficshape"
-	"github.com/google/martian/verify"
+	"github.com/google/martian/v3"
+	mapi "github.com/google/martian/v3/api"
+	"github.com/google/martian/v3/cors"
+	"github.com/google/martian/v3/fifo"
+	"github.com/google/martian/v3/har"
+	"github.com/google/martian/v3/httpspec"
+	"github.com/google/martian/v3/marbl"
+	"github.com/google/martian/v3/martianhttp"
+	"github.com/google/martian/v3/martianlog"
+	"github.com/google/martian/v3/mitm"
+	"github.com/google/martian/v3/servemux"
+	"github.com/google/martian/v3/trafficshape"
+	"github.com/google/martian/v3/verify"
 
-	_ "github.com/google/martian/body"
-	_ "github.com/google/martian/cookie"
-	_ "github.com/google/martian/failure"
-	_ "github.com/google/martian/martianurl"
-	_ "github.com/google/martian/method"
-	_ "github.com/google/martian/pingback"
-	_ "github.com/google/martian/port"
-	_ "github.com/google/martian/priority"
-	_ "github.com/google/martian/querystring"
-	_ "github.com/google/martian/skip"
-	_ "github.com/google/martian/stash"
-	_ "github.com/google/martian/static"
-	_ "github.com/google/martian/status"
+	_ "github.com/google/martian/v3/body"
+	_ "github.com/google/martian/v3/cookie"
+	_ "github.com/google/martian/v3/failure"
+	_ "github.com/google/martian/v3/martianurl"
+	_ "github.com/google/martian/v3/method"
+	_ "github.com/google/martian/v3/pingback"
+	_ "github.com/google/martian/v3/port"
+	_ "github.com/google/martian/v3/priority"
+	_ "github.com/google/martian/v3/querystring"
+	_ "github.com/google/martian/v3/skip"
+	_ "github.com/google/martian/v3/stash"
+	_ "github.com/google/martian/v3/static"
+	_ "github.com/google/martian/v3/status"
 )
 
 var (
@@ -253,8 +253,22 @@ var (
 )
 
 func main() {
+	martian.Init()
+
 	p := martian.NewProxy()
 	defer p.Close()
+
+	l, err := net.Listen("tcp", *addr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	lAPI, err := net.Listen("tcp", *apiAddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Printf("martian: starting proxy on %s and api on %s", l.Addr().String(), lAPI.Addr().String())
 
 	tr := &http.Transport{
 		Dial: (&net.Dialer{
@@ -335,15 +349,17 @@ func main() {
 
 	// Redirect API traffic to API server.
 	if *apiAddr != "" {
-		apip := strings.Replace(*apiAddr, ":", "", 1)
+		addrParts := strings.Split(lAPI.Addr().String(), ":")
+		apip := addrParts[len(addrParts)-1]
 		port, err := strconv.Atoi(apip)
 		if err != nil {
 			log.Fatal(err)
 		}
+		host := strings.Join(addrParts[:len(addrParts)-1], ":")
 
 		// Forward traffic that pattern matches in http.DefaultServeMux
 		apif := servemux.NewFilter(mux)
-		apif.SetRequestModifier(mapi.NewForwarder("", port))
+		apif.SetRequestModifier(mapi.NewForwarder(host, port))
 		topg.AddRequestModifier(apif)
 	}
 	topg.AddRequestModifier(stack)
@@ -405,11 +421,6 @@ func main() {
 	rh.SetResponseVerifier(m)
 	configure("/verify/reset", rh, mux)
 
-	l, err := net.Listen("tcp", *addr)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	if *trafficShaping {
 		tsl := trafficshape.NewListener(l)
 		tsh := trafficshape.NewHandler(tsl)
@@ -418,27 +429,17 @@ func main() {
 		l = tsl
 	}
 
-	lAPI, err := net.Listen("tcp", *apiAddr)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Printf("martian: starting proxy on %s and api on %s", l.Addr().String(), lAPI.Addr().String())
-
 	go p.Serve(l)
 
 	go http.Serve(lAPI, mux)
 
 	sigc := make(chan os.Signal, 1)
-	signal.Notify(sigc, os.Interrupt, os.Kill)
+	signal.Notify(sigc, os.Interrupt)
 
 	<-sigc
 
 	log.Println("martian: shutting down")
-}
-
-func init() {
-	martian.Init()
+	os.Exit(0)
 }
 
 // configure installs a configuration handler at path.

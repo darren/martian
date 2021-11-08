@@ -17,11 +17,12 @@
 package filter
 
 import (
+	"fmt"
 	"net/http"
 
-	"github.com/google/martian"
-	"github.com/google/martian/log"
-	"github.com/google/martian/verify"
+	"github.com/google/martian/v3"
+	"github.com/google/martian/v3/log"
+	"github.com/google/martian/v3/verify"
 )
 
 var noop = martian.Noop("Filter")
@@ -121,6 +122,10 @@ func (f *Filter) ResponseWhenFalse(mod martian.ResponseModifier) {
 // ModifyRequest evaluates reqcond and executes treqmod iff reqcond evaluates
 // to true; otherwise, freqmod is executed.
 func (f *Filter) ModifyRequest(req *http.Request) error {
+	if f.reqcond == nil {
+		return fmt.Errorf("filter.ModifyRequest: no request condition set. Set condition with SetRequestCondition")
+	}
+
 	match := f.reqcond.MatchRequest(req)
 	if match {
 		log.Debugf("filter.ModifyRequest: matched %s", req.URL)
@@ -133,6 +138,10 @@ func (f *Filter) ModifyRequest(req *http.Request) error {
 // ModifyResponse evaluates rescond and executes tresmod iff rescond evaluates
 // to true; otherwise, fresmod is executed.
 func (f *Filter) ModifyResponse(res *http.Response) error {
+	if f.rescond == nil {
+		return fmt.Errorf("filter.ModifyResponse: no response condition set. Set condition with SetResponseCondition")
+	}
+
 	match := f.rescond.MatchResponse(res)
 	if match {
 		requ := ""

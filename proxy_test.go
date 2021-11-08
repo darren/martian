@@ -31,10 +31,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/martian/log"
-	"github.com/google/martian/martiantest"
-	"github.com/google/martian/mitm"
-	"github.com/google/martian/proxyutil"
+	"github.com/google/martian/v3/log"
+	"github.com/google/martian/v3/martiantest"
+	"github.com/google/martian/v3/mitm"
+	"github.com/google/martian/v3/proxyutil"
 )
 
 type tempError struct{}
@@ -869,6 +869,11 @@ func TestIntegrationTransparentHTTP(t *testing.T) {
 
 	tr := martiantest.NewTransport()
 	p.SetRoundTripper(tr)
+
+	if got, want := p.GetRoundTripper(), tr; got != want {
+		t.Errorf("proxy.GetRoundTripper: got %v, want %v", got, want)
+	}
+
 	p.SetTimeout(200 * time.Millisecond)
 
 	tm := martiantest.NewModifier()
@@ -1313,4 +1318,35 @@ func TestServerClosesConnection(t *testing.T) {
 		t.Fatalf("error while ReadAll: %v", err)
 	}
 	defer res.Body.Close()
+}
+
+// TestRacyClose checks that creating a proxy, serving from it, and closing
+// it in rapid succession doesn't result in race warnings.
+// See https://github.com/google/martian/issues/286.
+func TestRacyClose(t *testing.T) {
+	t.Parallel()
+
+	log.SetLevel(log.Silent) // avoid "failed to accept" messages because we close l
+	openAndConnect := func() {
+		l, err := net.Listen("tcp", "[::]:0")
+		if err != nil {
+			t.Fatalf("net.Listen(): got %v, want no error", err)
+		}
+		defer l.Close() // to make p.Serve exit
+
+		p := NewProxy()
+		go p.Serve(l)
+		defer p.Close()
+
+		conn, err := net.Dial("tcp", l.Addr().String())
+		if err != nil {
+			t.Fatalf("net.Dial(): got %v, want no error", err)
+		}
+		defer conn.Close()
+	}
+
+	// Repeat a bunch of times to make failures more repeatable.
+	for i := 0; i < 100; i++ {
+		openAndConnect()
+	}
 }

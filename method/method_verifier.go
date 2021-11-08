@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package method provides utilities for verifying method type in martian.Proxy.
+// Package method provides utilities for working with request methods.
 package method
 
 import (
@@ -20,9 +20,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/google/martian"
-	"github.com/google/martian/parse"
-	"github.com/google/martian/verify"
+	"github.com/google/martian/v3"
+	"github.com/google/martian/v3/parse"
+	"github.com/google/martian/v3/verify"
 )
 
 type verifier struct {
